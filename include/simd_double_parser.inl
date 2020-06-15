@@ -425,23 +425,32 @@ namespace
 		bool useDouble = false;	//初始没溢出，如果整数溢出了，则需要使用浮点数算法
 		int64_t i64;
 
+#if 1
 		if (*psz == '0')
 		{
 			++psz;
 			if (psz >= pszEnd)
 			{
+				s = psz;
 				return { number_value{0}, parser_result::Long };
 			}
-			if (*psz != '.')
-			{
-				return { number_value{0}, parser_result::Invalid };
-			}
-			else
+			else if (*psz == '.')
 			{
 				i64 = 0;
 				goto label_dot;
 			}
+			else if (!x_is_digit(*psz))
+			{
+				s = psz;
+				return { number_value{0}, parser_result::Long };
+			}
+			else
+			{
+				s = psz;
+				return { number_value{0}, parser_result::Invalid };
+			}
 		}
+#endif
 
 		i64 = x_mm_convert_string_long(0, psz, pszEnd, useDouble);
 		if (useDouble)
@@ -497,6 +506,7 @@ namespace
 
 			if (psz >= pszEnd)
 			{
+				s = psz;
 				return { number_value{0}, parser_result::Invalid };
 			}
 
@@ -505,6 +515,7 @@ namespace
 
 			if (overflow || e2 > ((std::numeric_limits<int32_t>::max)() / 2))
 			{
+				s = psz;
 				return { number_value{0}, parser_result::Invalid };
 			}
 
