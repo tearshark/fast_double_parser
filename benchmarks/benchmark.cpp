@@ -28,7 +28,8 @@ double findmax_simd_double_parser(const std::vector<std::string>& s) {
   simd_double_parser::number_value x;
   simd_double_parser::parser_result isok;
   for (const std::string & st : s) {
-    std::tie(x, isok) = simd_double_parser::parser(st.c_str());
+    const char* psz = st.c_str();
+    std::tie(x, isok) = simd_double_parser::parser(psz, psz + st.size());
     if (isok == simd_double_parser::parser_result::Invalid)
       throw std::runtime_error("bug in findmax_fast_double_parser");
     answer = answer > x.d ? answer : x.d;
@@ -182,6 +183,23 @@ void validate(const std::vector<std::string>& s) {
       printf("f64_ulp_dist = %d\n", (int)f64_ulp_dist(x, xref));
       throw std::runtime_error("fast_double_parser disagrees");
     }
+	const char* psz = st.c_str();
+	auto r = simd_double_parser::parser(psz, psz + st.size());
+    if (std::get<1>(r) == simd_double_parser::parser_result::Invalid)
+    {
+		printf("simd_double_parser refused to parse %s\n", st.c_str());
+		throw std::runtime_error("simd_double_parser refused to parse");
+    }
+    xref = (std::get<1>(r) == simd_double_parser::parser_result::Double) ? std::get<0>(r).d : (double)std::get<0>(r).l;
+    double dis = std::abs(xref - x);
+	if (dis > 1E10) {
+		std::cerr << "simd_double_parser disagrees" << std::endl;
+		printf("simd_double_parser: %.*e\n", DBL_DIG + 1, x);
+		printf("reference: %.*e\n", DBL_DIG + 1, xref);
+		printf("string: %s\n", st.c_str());
+		printf("f64_ulp_dist = %d\n", (int)f64_ulp_dist(x, xref));
+		throw std::runtime_error("simd_double_parser disagrees");
+	}
   }
 }
 

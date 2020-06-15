@@ -53,10 +53,11 @@ void check(double d) {
   s.resize(written);
 
   double x;
-#if 1
+#if 0
   simd_double_parser::number_value nv;
   simd_double_parser::parser_result result;
-  std::tie(nv, result) = simd_double_parser::parser(s.data());
+  const char* psz = s.data();
+  std::tie(nv, result) = simd_double_parser::parser(psz, psz + s.size());
   bool isok = result != simd_double_parser::parser_result::Invalid;
   if (result == simd_double_parser::parser_result::Double)
       x = nv.d;
