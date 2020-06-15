@@ -2,6 +2,7 @@
 #include "absl/strings/charconv.h"
 #include "absl/strings/numbers.h"
 #include "fast_double_parser.h"
+#include "simd_double_parser.h"
 
 #include <algorithm>
 #include <chrono>
@@ -22,16 +23,29 @@
 #include "double-conversion/ieee.h"
 #include "double-conversion/string-to-double.h"
 
-double findmax_fast_double_parser(const std::vector<std::string>& s) {
+double findmax_simd_double_parser(const std::vector<std::string>& s) {
   double answer = 0;
-  double x;
+  simd_double_parser::number_value x;
+  simd_double_parser::parser_result isok;
   for (const std::string & st : s) {
-    bool isok = fast_double_parser::parse_number(st.c_str(), &x);
-    if (!isok)
+    std::tie(x, isok) = simd_double_parser::parser(st.c_str());
+    if (isok == simd_double_parser::parser_result::Invalid)
       throw std::runtime_error("bug in findmax_fast_double_parser");
-    answer = answer > x ? answer : x;
+    answer = answer > x.d ? answer : x.d;
   }
   return answer;
+}
+
+double findmax_fast_double_parser(const std::vector<std::string>& s) {
+	double answer = 0;
+	double x;
+	for (const std::string& st : s) {
+		bool isok = fast_double_parser::parse_number(st.c_str(), &x);
+		if (!isok)
+			throw std::runtime_error("bug in findmax_fast_double_parser");
+		answer = answer > x ? answer : x;
+	}
+	return answer;
 }
 
 double findmax_strtod(const std::vector<std::string>& s) {
@@ -195,6 +209,16 @@ void process(const std::vector<std::string>& lines, size_t volume) {
     dif = double(std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count());
     if (i > 0)
       printf("fast_double_parser  %.2f MB/s\n", volumeMB * 1000000000 / dif);
+
+	t1 = std::chrono::high_resolution_clock::now();
+	ts = findmax_simd_double_parser(lines);
+	t2 = std::chrono::high_resolution_clock::now();
+	if (ts == 0)
+		printf("bug\n");
+	dif = double(std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count());
+	if (i > 0)
+		printf("simd_double_parser  %.2f MB/s\n", volumeMB * 1000000000 / dif);
+
     t1 = std::chrono::high_resolution_clock::now();
     ts = findmax_strtod(lines);
     t2 = std::chrono::high_resolution_clock::now();
@@ -203,6 +227,7 @@ void process(const std::vector<std::string>& lines, size_t volume) {
     dif = double(std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count());
     if (i > 0)
       printf("strtod         %.2f MB/s\n", volumeMB * 1000000000 / dif);
+
     t1 = std::chrono::high_resolution_clock::now();
     ts = findmax_absl_from_chars(lines);
     t2 = std::chrono::high_resolution_clock::now();
@@ -211,6 +236,7 @@ void process(const std::vector<std::string>& lines, size_t volume) {
     dif = double(std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count());
     if (i > 0)
       printf("abslfromch     %.2f MB/s\n", volumeMB * 1000000000 / dif);
+
     t1 = std::chrono::high_resolution_clock::now();
     ts = findmax_absl(lines);
     t2 = std::chrono::high_resolution_clock::now();
@@ -219,6 +245,7 @@ void process(const std::vector<std::string>& lines, size_t volume) {
     dif = double(std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count());
     if (i > 0)
       printf("absl           %.2f MB/s\n", volumeMB * 1000000000 / dif);
+
     t1 = std::chrono::high_resolution_clock::now();
     ts = findmax_doubleconversion(lines);
     t2 = std::chrono::high_resolution_clock::now();
@@ -227,6 +254,7 @@ void process(const std::vector<std::string>& lines, size_t volume) {
     dif = double(std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count());
     if (i > 0)
       printf("double-conv    %.2f MB/s\n", volumeMB * 1000000000 / dif);
+
     printf("\n\n");
   }
 }
