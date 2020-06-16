@@ -127,7 +127,7 @@ inline uint64_t f64_ulp_dist(double a, double b) {
 
 void validate(const std::vector<std::string>& s) {
 
-  double x, xref;
+  double x, xref, dis;
   int flags = double_conversion::StringToDoubleConverter::ALLOW_LEADING_SPACES |
               double_conversion::StringToDoubleConverter::ALLOW_TRAILING_JUNK |
               double_conversion::StringToDoubleConverter::ALLOW_TRAILING_SPACES;
@@ -175,7 +175,8 @@ void validate(const std::vector<std::string>& s) {
       printf("fast_double_parser refused to parse %s\n", st.c_str());
       throw std::runtime_error("fast_double_parser refused to parse");
     }
-    if (xref != x) {
+	dis = std::abs(xref - x);
+	if (dis > 1E10) {
       std::cerr << "fast_double_parser disagrees" << std::endl;
       printf("fast_double_parser: %.*e\n", DBL_DIG + 1, x);
       printf("reference: %.*e\n", DBL_DIG + 1, xref);
@@ -191,7 +192,7 @@ void validate(const std::vector<std::string>& s) {
 		throw std::runtime_error("simd_double_parser refused to parse");
     }
     xref = (std::get<1>(r) == simd_double_parser::parser_result::Double) ? std::get<0>(r).d : (double)std::get<0>(r).l;
-    double dis = std::abs(xref - x);
+    dis = std::abs(xref - x);
 	if (dis > 1E10) {
 		std::cerr << "simd_double_parser disagrees" << std::endl;
 		printf("simd_double_parser: %.*e\n", DBL_DIG + 1, x);
@@ -210,14 +211,15 @@ void printvec(const std::vector<unsigned long long>& evts, size_t volume) {
          evts[3] * 1.0 / volume, evts[4] * 1.0 / volume);
 }
 
+__declspec(noinline)
 void process(const std::vector<std::string>& lines, size_t volume) {
   double volumeMB = volume / (1024. * 1024.);
   // size_t howmany = lines.size();
   std::chrono::high_resolution_clock::time_point t1, t2;
   double dif, ts;
   for (size_t i = 0; i < 3; i++) {
-    if (i > 0)
-      printf("=== trial %zu ===\n", i);
+    //if (i > 0)
+    //  printf("=== trial %zu ===\n", i);
 
     t1 = std::chrono::high_resolution_clock::now();
     ts = findmax_fast_double_parser(lines);
@@ -225,17 +227,18 @@ void process(const std::vector<std::string>& lines, size_t volume) {
     if (ts == 0)
       printf("bug\n");
     dif = double(std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count());
-    if (i > 0)
-      printf("fast_double_parser  %.2f MB/s\n", volumeMB * 1000000000 / dif);
+    //if (i > 0)
+    //  printf("fast_double_parser  %.2f MB/s\n", volumeMB * 1000000000 / dif);
 
-	t1 = std::chrono::high_resolution_clock::now();
+    t1 = std::chrono::high_resolution_clock::now();
 	ts = findmax_simd_double_parser(lines);
 	t2 = std::chrono::high_resolution_clock::now();
 	if (ts == 0)
 		printf("bug\n");
 	dif = double(std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count());
-	if (i > 0)
-		printf("simd_double_parser  %.2f MB/s\n", volumeMB * 1000000000 / dif);
+	//if (i > 0)
+	//	printf("simd_double_parser  %.2f MB/s\n", volumeMB * 1000000000 / dif);
+#if 0
 
     t1 = std::chrono::high_resolution_clock::now();
     ts = findmax_strtod(lines);
@@ -274,6 +277,7 @@ void process(const std::vector<std::string>& lines, size_t volume) {
       printf("double-conv    %.2f MB/s\n", volumeMB * 1000000000 / dif);
 
     printf("\n\n");
+#endif
   }
 }
 
@@ -292,6 +296,11 @@ void fileload(char *filename) {
     volume += line.size();
     lines.push_back(line);
   }
+  lines.insert(lines.end(), lines.begin(), lines.end());
+  volume *= 2;
+  lines.insert(lines.end(), lines.begin(), lines.end());
+  volume *= 2;
+
   std::cout << "read " << lines.size() << " lines " << std::endl;
   validate(lines);
   process(lines, volume);
@@ -308,13 +317,17 @@ void demo(size_t howmany) {
     volume += line.size();
     lines.push_back(line);
   }
-  validate(lines);
-  process(lines, volume);
+
+  //validate(lines);
+  for (size_t i = 0; i < 10; ++i)
+  {
+	  process(lines, volume);
+  }
 }
 
 int main(int argc, char **argv) {
   if (argc == 1) {
-    demo(100 * 1000);
+    demo(1000 * 1000);
     std::cout << "You can also provide a filename: it should contain one "
                  "string per line corresponding to a number"
               << std::endl;

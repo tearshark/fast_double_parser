@@ -29,6 +29,9 @@ namespace fast_double_parser {
 #ifndef unlikely
 #define unlikely(x) x
 #endif // unlikely
+#ifndef disable_inline
+#define disable_inline __declspec(noinline)
+#endif
 #else  // _MSC_VER
 #ifndef unlikely
 #define unlikely(x) __builtin_expect(!!(x), 0)
@@ -36,6 +39,9 @@ namespace fast_double_parser {
 #ifndef really_inline
 #define really_inline __attribute__((always_inline)) inline
 #endif // really_inline
+#ifndef disable_inline
+#define disable_inline __attribute__((noinline))
+#endif
 #endif // _MSC_VER
 
 struct value128 {
@@ -113,7 +119,7 @@ static const double power_of_ten[] = {
     1e0,  1e1,  1e2,  1e3,  1e4,  1e5,  1e6,  1e7,  1e8,  1e9,  1e10, 1e11,
     1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22};
 
-static inline bool is_integer(char c) {
+static really_inline bool is_integer(char c) {
   return (c >= '0' && c <= '9');
   // this gets compiled to (uint8_t)(c - '0') <= 9 on all decent compilers
 }
@@ -1094,8 +1100,20 @@ const uint64_t mantissa_128[] = {0x419ea3bd35385e2d,
 // set to false. This should work *most of the time* (like 99% of the time).
 // We assume that power is in the [FASTFLOAT_SMALLEST_POWER,
 // FASTFLOAT_LARGEST_POWER] interval: the caller is responsible for this check.
-really_inline double compute_float_64(int64_t power, uint64_t i, bool negative,
+disable_inline double compute_float_64(int64_t power, uint64_t i, bool negative,
                                       bool *success) {
+
+/*
+    double dval = simd_double_parser::x_fast_path((double)i, power);
+    if (negative) dval = -dval;
+    *success = true;
+    return dval;
+*/
+
+  // possible, except if i == 0, so we handle i == 0 separately.
+  if(i == 0) {
+    return 0.0;
+  }
 
   // we start with a fast path
   // It was described in
@@ -1149,10 +1167,6 @@ really_inline double compute_float_64(int64_t power, uint64_t i, bool negative,
   // The fast path has now failed, so we are failing back on the slower path.
 
   // In the slow path, we need to adjust i so that it is > 1<<63 which is always
-  // possible, except if i == 0, so we handle i == 0 separately.
-  if(i == 0) {
-    return 0.0;
-  }
 
   // We are going to need to do some 64-bit arithmetic to get a more precise product.
   // We use a table lookup approach.
@@ -1267,6 +1281,7 @@ really_inline double compute_float_64(int64_t power, uint64_t i, bool negative,
   return d;
 }
 
+disable_inline
 static bool parse_float_strtod(const char *ptr, double *outDouble) {
   char *endptr;
   *outDouble = strtod(ptr, &endptr);
@@ -1322,7 +1337,7 @@ bool is_one_of(char v)
 // parse the number at p
 template <char... DecSeparators>
 WARN_UNUSED
-really_inline bool parse_number_base(const char *p, double *outDouble) {
+disable_inline bool parse_number_base(const char *p, double *outDouble) {
   const char *pinit = p;
   bool found_minus = (*p == '-');
   bool negative = false;
@@ -1462,7 +1477,7 @@ really_inline bool parse_number_base(const char *p, double *outDouble) {
 typedef bool (*parser_function_t)(const char *p, double *outDouble);
 
 
-constexpr parser_function_t parse_number WARN_UNUSED = parse_number_base<'.', ','>;
+constexpr parser_function_t parse_number WARN_UNUSED = parse_number_base<'.'/*, ','*/>;
 
 namespace decimal_separator_dot
 {
