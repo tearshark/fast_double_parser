@@ -306,7 +306,7 @@ void fileload(char *filename) {
 */
 
   std::cout << "read " << lines.size() << " lines " << std::endl;
-  //validate(lines);
+  validate(lines);
   //for (size_t i = 0; i < 10; ++i)
 	  process(lines, volume);
 }
