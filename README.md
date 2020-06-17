@@ -17,12 +17,13 @@ We have benchmarked our parser on a collection of strings from a sample geojson 
 
 | parser                                | MB/s |
 | ------------------------------------- | ---- |
-| fast_double_parser                    | 660 MB/s  |
-| abseil, from_chars                    | 330 MB/s |
-| double_conversion                     | 250 MB/s |
-| strtod                    | 70 MB/s |
+| simd_double_parser | 1279.46 MB/s |
+| fast_double_parser                    | 736.44 MB/s |
+| abseil, from_chars                    | 494.11 MB/s |
+| double_conversion                     | 285.80 MB/s |
+| strtod                    | 170.99 MB/s |
 
-(configuration: Apple clang version 11.0.0, I7-7700K)
+(configuration: clang version 10.0.0-4ubuntu1, I7-8700K OC 4.4GHz)
 
 We expect string numbers to follow [RFC 7159](https://tools.ietf.org/html/rfc7159). In particular,
 the parser will reject overly large values that would not fit in binary64. It will not produce
@@ -54,47 +55,49 @@ Under Windows, the last like should be `./Release/benchmark.exe`.
 
 
 ```
-$ ./benchmark 
+$ ./out/build/WSL-Clang-Release/benchmark
 parsing random integers in the range [0,1)
 
 
 === trial 1 ===
-fast_double_parser  460.64 MB/s
-strtod         186.90 MB/s
-abslfromch     168.61 MB/s
-absl           140.62 MB/s
-double-conv    206.15 MB/s
+fast_double_parser  769.77 MB/s
+simd_double_parser  1077.16 MB/s
+strtod         109.04 MB/s
+abslfromch     267.04 MB/s
+absl           242.39 MB/s
+double-conv    339.36 MB/s
 
 
 === trial 2 ===
-fast_double_parser  449.76 MB/s
-strtod         174.59 MB/s
-abslfromch     152.68 MB/s
-absl           157.52 MB/s
-double-conv    193.97 MB/s
-
-
+fast_double_parser  772.42 MB/s
+simd_double_parser  1063.91 MB/s
+strtod         109.65 MB/s
+abslfromch     267.13 MB/s
+absl           242.62 MB/s
+double-conv    348.11 MB/s
 ```
 
 ```
-$ ./benchmark benchmarks/data/canada.txt
-read 111126 lines 
+$ ./out/build/WSL-Clang-Release/benchmark benchmarks/data/canada.txt
+read 111126 lines
 
 
 === trial 1 ===
-fast_double_parser  662.01 MB/s
-strtod         69.73 MB/s
-abslfromch     341.74 MB/s
-absl           325.23 MB/s
-double-conv    249.68 MB/s
+fast_double_parser  734.14 MB/s
+simd_double_parser  1279.46 MB/s
+strtod         170.04 MB/s
+abslfromch     477.66 MB/s
+absl           461.43 MB/s
+double-conv    263.21 MB/s
 
 
 === trial 2 ===
-fast_double_parser  611.56 MB/s
-strtod         69.53 MB/s
-abslfromch     330.00 MB/s
-absl           328.45 MB/s
-double-conv    243.90 MB/s
+fast_double_parser  736.44 MB/s
+simd_double_parser  1211.09 MB/s
+strtod         170.99 MB/s
+abslfromch     494.11 MB/s
+absl           470.44 MB/s
+double-conv    285.80 MB/s
 ```
 
 ## API
@@ -104,13 +107,31 @@ The current API is simple enough:
 ```C++
 #include "fast_double_parser.h" // the file is in the include directory
 
-
 double x;
 char * string = ...
-bool isok = fast_double_parser::parse_number(string, &x);
+size_t length = ...
+bool isok = fast_double_parser::parse_number(string, &x, string + length);
 ```
 
 You must check the value of the boolean (`isok`): if it is false, then the function refused to parse.
+
+
+
+```c++
+#include "simd_double_parser.h" // the file is in the include directory
+
+simd_double_parser::number_value x;
+simd_double_parser::parser_result isok;
+char * string = ...
+size_t length = ...
+std::tie(x, isok) = simd_double_parser::parser(string, string + length);
+if (isok != simd_double_parser::parser_result::Invalid)
+	...
+```
+
+You must check the value of the parser_result(`isok`): if it is Invalid, then the function refused to parse.
+
+
 
 ## Credit
 
