@@ -9,6 +9,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cassert>
+#include <type_traits>
+#include <wchar.h>
 
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -18,6 +21,13 @@
 #endif
 
 namespace fast_double_parser {
+
+    enum struct result_type
+    {
+        Invalid,
+        Long,
+        Double,
+    };
 
 #define FASTFLOAT_SMALLEST_POWER -325
 #define FASTFLOAT_LARGEST_POWER 308
@@ -64,10 +74,10 @@ struct value128 {
     !defined(_M_X64) && !defined(_M_ARM64)// _umul128 for x86, arm
 // this is a slow emulation routine for 32-bit Windows
 //
-static inline uint64_t __emulu(uint32_t x, uint32_t y) {
+static really_inline uint64_t __emulu(uint32_t x, uint32_t y) {
   return x * (uint64_t)y;
 }
-static inline uint64_t _umul128(uint64_t ab, uint64_t cd, uint64_t *hi) {
+static really_inline uint64_t _umul128(uint64_t ab, uint64_t cd, uint64_t *hi) {
   uint64_t ad = __emulu((uint32_t)(ab >> 32), (uint32_t)cd);
   uint64_t bd = __emulu((uint32_t)ab, (uint32_t)cd);
   uint64_t adbc = ad + __emulu((uint32_t)ab, (uint32_t)(cd >> 32));
@@ -99,7 +109,7 @@ really_inline value128 full_multiplication(uint64_t value1, uint64_t value2) {
 
 
 /* result might be undefined when input_num is zero */
-int leading_zeroes(uint64_t input_num) {
+really_inline int leading_zeroes(uint64_t input_num) {
 #ifdef _MSC_VER
   unsigned long leading_zero = 0;
   // Search the mask data from most significant bit (MSB)
@@ -119,8 +129,9 @@ static const double power_of_ten[] = {
     1e0,  1e1,  1e2,  1e3,  1e4,  1e5,  1e6,  1e7,  1e8,  1e9,  1e10, 1e11,
     1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22};
 
-static really_inline bool is_integer(char c) {
-  return (c >= '0' && c <= '9');
+template<class _Char>
+static really_inline bool is_integer(_Char c) {
+  return (c >= (_Char)'0' && c <= (_Char)'9');
   // this gets compiled to (uint8_t)(c - '0') <= 9 on all decent compilers
 }
 
@@ -1100,7 +1111,7 @@ const uint64_t mantissa_128[] = {0x419ea3bd35385e2d,
 // set to false. This should work *most of the time* (like 99% of the time).
 // We assume that power is in the [FASTFLOAT_SMALLEST_POWER,
 // FASTFLOAT_LARGEST_POWER] interval: the caller is responsible for this check.
-disable_inline double compute_float_64(int64_t power, uint64_t i, bool negative,
+really_inline double compute_float_64(int64_t power, uint64_t i, bool negative,
                                       bool *success) {
 
 /*
@@ -1281,9 +1292,9 @@ disable_inline double compute_float_64(int64_t power, uint64_t i, bool negative,
   return d;
 }
 
-disable_inline
-static bool parse_float_strtod(const char *ptr, double *outDouble) {
-  char *endptr;
+really_inline
+static bool parse_float_strtod(const char *&ptr, double *outDouble, const char *pend) {
+  char *endptr = (char *)pend;
   *outDouble = strtod(ptr, &endptr);
   // Some libraries will set errno = ERANGE when the value is subnormal,
   // yet we may want to be able to parse subnormal values.
@@ -1300,34 +1311,58 @@ static bool parse_float_strtod(const char *ptr, double *outDouble) {
   if ((endptr == ptr) || (!std::isfinite(*outDouble))) {
     return false;
   }
+  ptr = endptr;
   return true;
 }
 
+really_inline
+static bool parse_float_strtod(const wchar_t *&ptr, double *outDouble, const wchar_t*pend) {
+    wchar_t* endptr = (wchar_t *)pend;
+	*outDouble = wcstod(ptr, &endptr);
+	// Some libraries will set errno = ERANGE when the value is subnormal,
+	// yet we may want to be able to parse subnormal values.
+	// However, we do not want to tolerate NAN or infinite values.
+	// There isno realistic application where you might need values so large than
+	// they can't fit in binary64. The maximal value is about  1.7976931348623157
+	// × 10^308 It is an unimaginable large number. There will never be any piece
+	// of engineering involving as many as 10^308 parts. It is estimated that
+	// there are about 10^80 atoms in the universe. The estimate for the total
+	// number of electrons is similar. Using a double-precision floating-point
+	// value, we can represent easily the number of atoms in the universe. We
+	// could  also represent the number of ways you can pick any three individual
+	// atoms at random in the universe.
+	if ((endptr == ptr) || (!std::isfinite(*outDouble))) {
+		return false;
+	}
+	ptr = endptr;
+	return true;
+}
+
 #if ( __cplusplus < 201703L )
-template <char First, char... Rest>
+template <class _Char, _Char First, _Char... Rest>
 struct one_of_impl
 {
-  really_inline static bool call(char v)
+  really_inline static bool call(_Char v)
   {
-    return First == v || one_of_impl<Rest...>::call(v);
+    return First == v || one_of_impl<_Char, Rest...>::call(v);
   }
 };
-template<char First>
-struct one_of_impl<First>
+template<class _Char, _Char First>
+struct one_of_impl<_Char, First>
 {
-  really_inline static bool call(char v)
+  really_inline static bool call(_Char v)
   {
     return First == v;
   }
 };
-template <char... Values>
-really_inline bool is_one_of(char v)
+template <class _Char, _Char... Values>
+really_inline bool is_one_of(_Char v)
 {
-  return one_of_impl<Values...>::call(v);
+  return one_of_impl<_Char, Values...>::call(v);
 }
 #else
-template <char... Values>
-bool is_one_of(char v)
+template <class _Char, _Char... Values>
+really_inline bool is_one_of(_Char v)
 {
   return ((v == Values) || ...);
 }
@@ -1335,71 +1370,116 @@ bool is_one_of(char v)
 
 
 // parse the number at p
-template <char... DecSeparators>
+template <class _Char, _Char... DecSeparators>
 WARN_UNUSED
-disable_inline bool parse_number_base(const char *p, double *outDouble) {
-  const char *pinit = p;
+bool parse_number_base(const _Char*&pinit, double *outDouble, const _Char* pend) {
+  typedef typename std::make_unsigned<_Char>::type _Uchar;
+  const _Char*p = pinit;
   bool found_minus = (*p == '-');
   bool negative = false;
+  bool is_double = false;
+  bool is_overflow = false;
+
   if (found_minus) {
     ++p;
     negative = true;
-    if (!is_integer(*p)) { // a negative sign must be followed by an integer
+    if (p >= pend || !is_integer(*p)) { // a negative sign must be followed by an integer
+      pinit = p;
       return false;
     }
   }
-  const char *const start_digits = p;
+  else if (*p == '+') {
+    ++p;
+	if (p >= pend || !is_integer(*p)) { // a negative sign must be followed by an integer
+		pinit = p;
+		return false;
+	}
+  }
+
+  const _Char *const start_digits = p;
 
   uint64_t i;      // an unsigned int avoids signed overflows (which are bad)
   if (*p == '0') { // 0 cannot be followed by an integer
     ++p;
-    if (is_integer(*p)) {
+    if (p < pend && is_integer(*p)) {
+      pinit = p;
       return false;
     }
     i = 0;
   } else {
     if (!(is_integer(*p))) { // must start with an integer
+      pinit = p;
       return false;
     }
-    unsigned char digit = *p - '0';
+    _Uchar digit = *p - '0';
     i = digit;
     p++;
     // the is_made_of_eight_digits_fast routine is unlikely to help here because
     // we rarely see large integer parts like 123456789
-    while (is_integer(*p)) {
+    while (p < pend && is_integer(*p)) {
       digit = *p - '0';
+	  ++p;
       // a multiplication by 10 is cheaper than an arbitrary integer
       // multiplication
+      
+      //int64_t::max=2^63-1
+      //2 ^ 63 = 9223372036854775808
+      //2 ^ 62 = 922337203685477580 = 0x0CCCCCCCCCCCCCCC
+	  if (unlikely(i >= 922337203685477580))
+	  {
+		  if (i != 922337203685477580 || digit >= 8)
+		  {
+              is_overflow = true;
+              while (p < pend && is_integer(*p)) ++p;
+			  break;
+		  }
+	  }
       i = 10 * i + digit; // might overflow, we will handle the overflow later
-      ++p;
     }
   }
+
   int64_t exponent = 0;
-  const char *first_after_period = NULL;
-  if (is_one_of<DecSeparators...>(*p)) {
+  const _Char *first_after_period = NULL;
+  if (is_one_of<_Char, DecSeparators...>(*p)) {
+    is_double = true;
     ++p;
     first_after_period = p;
-    if (is_integer(*p)) {
-      unsigned char digit = *p - '0';
+    if (p < pend && is_integer(*p)) {
+      _Uchar digit = *p - '0';
       ++p;
       i = i * 10 + digit; // might overflow + multiplication by 10 is likely
                           // cheaper than arbitrary mult.
       // we will handle the overflow later
     } else {
+      pinit = p;
       return false;
     }
-    while (is_integer(*p)) {
-      unsigned char digit = *p - '0';
+    while (p < pend && is_integer(*p)) {
+      _Uchar digit = *p - '0';
       ++p;
+
+	  //int64_t::max=2^63-1
+	  //2 ^ 63 = 9223372036854775808
+	  //2 ^ 62 = 922337203685477580 = 0x0CCCCCCCCCCCCCCC
+	  if (unlikely(i >= 922337203685477580))
+	  {
+		  if (i != 922337203685477580 || digit >= 8)
+		  {
+              is_overflow = true;
+			  while (p < pend && is_integer(*p)) ++p;
+			  break;
+		  }
+	  }
       i = i * 10 + digit; // in rare cases, this will overflow, but that's ok
                           // because we have parse_highprecision_float later.
     }
     exponent = first_after_period - p;
   }
-  int digit_count =
-      int(p - start_digits - 1); // used later to guard against overflows
+
+  int digit_count = int(p - start_digits - 1); // used later to guard against overflows
   int64_t exp_number = 0;   // exponential part
-  if (('e' == *p) || ('E' == *p)) {
+  if ((*p | 32) == 'e') {
+    is_double = true;
     ++p;
     bool neg_exp = false;
     if ('-' == *p) {
@@ -1408,25 +1488,27 @@ disable_inline bool parse_number_base(const char *p, double *outDouble) {
     } else if ('+' == *p) {
       ++p;
     }
-    if (!is_integer(*p)) {
+    if (p >= pend || !is_integer(*p)) {
+      pinit = p;
       return false;
     }
-    unsigned char digit = *p - '0';
+    _Uchar digit = *p - '0';
     exp_number = digit;
     p++;
-    if (is_integer(*p)) {
+    if (p < pend && is_integer(*p)) {
       digit = *p - '0';
       exp_number = 10 * exp_number + digit;
       ++p;
     }
-    if (is_integer(*p)) {
+    if (p < pend && is_integer(*p)) {
       digit = *p - '0';
       exp_number = 10 * exp_number + digit;
       ++p;
     }
-    while (is_integer(*p)) {
+    while (p < pend && is_integer(*p)) {
       if (exp_number > 0x100000000) { // we need to check for overflows
                                       // we refuse to parse this
+        pinit = p;
         return false;
       }
       digit = *p - '0';
@@ -1435,16 +1517,22 @@ disable_inline bool parse_number_base(const char *p, double *outDouble) {
     }
     exponent += (neg_exp ? -exp_number : exp_number);
   }
+
+  if (unlikely(is_overflow)) {
+	  return parse_float_strtod(pinit, outDouble, pend);
+  }
+
   // If we frequently had to deal with long strings of digits,
   // we could extend our code by using a 128-bit integer instead
   // of a 64-bit integer. However, this is uncommon.
-  if (unlikely((digit_count >= 19))) { // this is uncommon
+  if (is_double && unlikely(digit_count >= 19)) { // this is uncommon
     // It is possible that the integer had an overflow.
     // We have to handle the case where we have 0.0000somenumber.
-    const char *start = start_digits;
-    while (*start == '0' || is_one_of<DecSeparators...>(*start)) {
+    const _Char *start = start_digits;
+    while (*start == '0' || is_one_of<_Char, DecSeparators...>(*start)) {
       start++;
     }
+
     // we over-decrement by one when there is a decimal separator
     digit_count -= int(start - start_digits);
     if (digit_count >= 19) {
@@ -1454,39 +1542,50 @@ disable_inline bool parse_number_base(const char *p, double *outDouble) {
       // 10000000000000000000000000000000000000000000e+308
       // 3.1415926535897932384626433832795028841971693993751
       //
-      return parse_float_strtod(pinit, outDouble);
+      return parse_float_strtod(pinit, outDouble, pend);
     }
   }
-  if (unlikely(exponent < FASTFLOAT_SMALLEST_POWER) ||
-      (exponent > FASTFLOAT_LARGEST_POWER)) {
-    // this is almost never going to get called!!!
-    // exponent could be as low as 325
-    return parse_float_strtod(pinit, outDouble);
+  assert(!is_overflow);
+
+  if (is_double)
+  {
+    if (unlikely(exponent < FASTFLOAT_SMALLEST_POWER) || (exponent > FASTFLOAT_LARGEST_POWER)) {
+      // this is almost never going to get called!!!
+      // exponent could be as low as 325
+      return parse_float_strtod(pinit, outDouble, pend);
+    }
+    // from this point forward, exponent >= FASTFLOAT_SMALLEST_POWER and
+    // exponent <= FASTFLOAT_LARGEST_POWER
+    bool success = true;
+    *outDouble = compute_float_64(exponent, i, negative, &success);
+    if (!success) {
+      // we are almost never going to get here.
+      return parse_float_strtod(pinit, outDouble, pend);
+    }
+    pinit = p;
+    return true;
   }
-  // from this point forward, exponent >= FASTFLOAT_SMALLEST_POWER and
-  // exponent <= FASTFLOAT_LARGEST_POWER
-  bool success = true;
-  *outDouble = compute_float_64(exponent, i, negative, &success);
-  if (!success) {
-    // we are almost never going to get here.
-    return parse_float_strtod(pinit, outDouble);
+  else
+  {
+    *outDouble = (double)(negative ? -(int64_t)i : (int64_t)i);
+	pinit = p;
+    return true;
   }
-  return true;
 }
 
-typedef bool (*parser_function_t)(const char *p, double *outDouble);
+typedef bool (*parser_function_t)(const char *&p, double *outDouble, const char *pend);
 
 
-constexpr parser_function_t parse_number WARN_UNUSED = parse_number_base<'.'/*, ','*/>;
+constexpr parser_function_t parse_number WARN_UNUSED = parse_number_base<char, '.', ','>;
 
 namespace decimal_separator_dot
 {
-  constexpr parser_function_t parse_number WARN_UNUSED = parse_number_base<'.'>;
+  constexpr parser_function_t parse_number WARN_UNUSED = parse_number_base<char, '.'>;
 }
 
 namespace decimal_separator_comma
 {
-  constexpr parser_function_t parse_number WARN_UNUSED = parse_number_base<','>;
+  constexpr parser_function_t parse_number WARN_UNUSED = parse_number_base<char, ','>;
 }
 
 } // namespace fast_double_parser

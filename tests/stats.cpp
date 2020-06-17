@@ -141,8 +141,7 @@ size_t parse_number_stats(const char *p) {
   if (found_minus) {
     ++p;
     negative = true;
-    if (!fast_double_parser::is_integer(
-            *p)) { // a negative sign must be followed by an integer
+    if (!fast_double_parser::is_integer(*p)) { // a negative sign must be followed by an integer
       return false;
     }
   }
@@ -151,8 +150,7 @@ size_t parse_number_stats(const char *p) {
   uint64_t i;      // an unsigned int avoids signed overflows (which are bad)
   if (*p == '0') { // 0 cannot be followed by an integer
     ++p;
-    if (fast_double_parser::
-            is_integer(*p)) {
+    if (fast_double_parser::is_integer(*p)) {
       return false;
     }
     i = 0;

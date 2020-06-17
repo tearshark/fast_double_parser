@@ -29,8 +29,8 @@ static inline uint64_t rng(uint64_t h) {
   return h;
 }
 
-std::string randomfloats(uint64_t howmany) {
-  std::stringstream out;
+std::wstring randomfloats(uint64_t howmany) {
+  std::wstringstream out;
   uint64_t offset = 1190;
   for (size_t i = 1; i <= howmany; i++) {
     uint64_t x = rng(i + offset);
@@ -48,8 +48,8 @@ std::string randomfloats(uint64_t howmany) {
 }
 
 void check(double d) {
-  std::string s(64, '\0');
-  auto written = std::snprintf(&s[0], s.size(), "%.*e", DBL_DIG + 1, d);
+  std::wstring s(64, L'\0');
+  auto written = swprintf(&s[0], s.size(), L"%.*e", DBL_DIG + 1, d);
   s.resize(written);
 
   double x;
@@ -64,35 +64,37 @@ void check(double d) {
   else
       x = (double)nv.l;
 #else
-  bool isok = fast_double_parser::parse_number(s.data(), &x);
+  const wchar_t* psz = s.data();
+  bool isok = fast_double_parser::parse_number_base<wchar_t, '.'>(psz, &x, psz + s.size());
 #endif
   if (!isok) {
-    printf("fast_double_parser refused to parse %s\n", s.c_str());
+    wprintf(L"fast_double_parser refused to parse %s\n", s.c_str());
     //throw std::runtime_error("fast_double_parser refused to parse");
   }
   if (d != x) {
     std::cerr << "fast_double_parser disagrees" << std::endl;
     printf("fast_double_parser: %.*e\n", DBL_DIG + 1, x);
     printf("reference: %.*e\n", DBL_DIG + 1, d);
-    printf("string: %s\n", s.c_str());
+    wprintf(L"string: %s\n", s.c_str());
     printf("f64_ulp_dist = %d\n", (int)f64_ulp_dist(x, d));
     //throw std::runtime_error("fast_double_parser disagrees");
   }
 }
 
-void check_string(std::string s) {
+void check_string(std::wstring s) {
   double x;
-  bool isok = fast_double_parser::parse_number(s.data(), &x);
+  const wchar_t* psz = s.data();
+  bool isok = fast_double_parser::parse_number_base<wchar_t, '.'>(psz, &x, psz + s.size());
   if (!isok) {
-    printf("fast_double_parser refused to parse %s\n", s.c_str());
+    wprintf(L"fast_double_parser refused to parse %s\n", s.c_str());
     throw std::runtime_error("fast_double_parser refused to parse");
   }
-  double d = strtod(s.data(), NULL);
+  double d = wcstod(s.data(), NULL);
   if (d != x) {
     std::cerr << "fast_double_parser disagrees" << std::endl;
     printf("fast_double_parser: %.*e\n", DBL_DIG + 1, x);
     printf("reference: %.*e\n", DBL_DIG + 1, d);
-    printf("string: %s\n", s.c_str());
+    wprintf(L"string: %s\n", s.c_str());
     printf("f64_ulp_dist = %d\n", (int)f64_ulp_dist(x, d));
     throw std::runtime_error("fast_double_parser disagrees");
   }
@@ -100,7 +102,7 @@ void check_string(std::string s) {
 
 
 void unit_tests() {
-  for (std::string s : {"7.3177701707893310e+15","1e23", "9007199254740995","7e23"}) {
+  for (std::wstring s : {L"7.3177701707893310e+15",L"1e23", L"9007199254740995", L"7e23"}) {
     check_string(s);
   }
   for (double d : {-65.613616999999977, 7.2057594037927933e+16, 1.0e-308,
@@ -202,9 +204,10 @@ static const double testing_power_of_ten[] = {
 
 
 void issue13() {
-  std::string a = "0";
+  std::wstring a = L"0";
   double x;
-  bool ok = fast_double_parser::parse_number(a.c_str(), &x);
+  const wchar_t* psz = a.data();
+  bool ok = fast_double_parser::parse_number_base<wchar_t, '.'>(psz, &x, psz + a.size());
   if(!ok) throw std::runtime_error("could not parse zero.");
   if(x != 0) throw std::runtime_error("zero does not map to zero.");
   std::cout << "zero maps to zero" << std::endl;
@@ -238,18 +241,19 @@ int main() {
   }
   for (int p = -306; p <= 308; p++) {
     double d;
-    std::string s = "1e"+std::to_string(p);
-    std::cout << "parsing " << s << std::endl;
-    bool isok = fast_double_parser::parse_number(s.data(), &d);
+    std::wstring s = L"1e"+std::to_wstring(p);
+    std::wcout << L"parsing " << s << std::endl;
+	const wchar_t* psz = s.data();
+    bool isok = fast_double_parser::parse_number_base<wchar_t, '.'>(psz, &d, psz + s.size());
     if (!isok) {
-      printf("fast_double_parser refused to parse %s\n", s.c_str());
+      wprintf(L"fast_double_parser refused to parse %s\n", s.c_str());
       throw std::runtime_error("fast_double_parser refused to parse");
     }
     if (d != testing_power_of_ten[p + 307]) {
       std::cerr << "fast_double_parser disagrees" << std::endl;
       printf("fast_double_parser: %.*e\n", DBL_DIG + 1, d);
       printf("reference: %.*e\n", DBL_DIG + 1, testing_power_of_ten[p + 307]);
-      printf("string: %s\n", s.c_str());
+      wprintf(L"string: %s\n", s.c_str());
       throw std::runtime_error("fast_double_parser disagrees");
     }
   }

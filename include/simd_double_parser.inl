@@ -1,6 +1,6 @@
 
-//namespace
-//{
+namespace
+{
 /*
 	#define _MM_SHUFFLE8(fp7, fp6, fp5, fp4, fp3, fp2, fp1, fp0) \
 		(((fp7) << 21) | ((fp6) << 18) | ((fp5) << 15) | ((fp4) << 12)) | \
@@ -368,7 +368,10 @@
 		const type* s = psz;
 		for (; s < e && x_is_digit(*s); ++s)
 		{
-			if (unlikely(result >= 0x0CCCCCCCCCCCCCCCULL))	// 2^63 = 9223372036854775808
+			//int64_t::max=2^63-1
+			//2 ^ 63 = 9223372036854775808
+			//2 ^ 62 = 922337203685477580 = 0x0CCCCCCCCCCCCCCC
+			if (unlikely(result >= 0x0CCCCCCCCCCCCCCCULL))
 			{
 				if (result != 0x0CCCCCCCCCCCCCCCULL || *s >= (type)'8')
 				{
@@ -592,9 +595,11 @@
 		if (useDouble)
 		{
 			double dval;
+/*
 			bool success = true;
 			dval = fast_double_parser::compute_float_64(exp, i64, false, &success);
 			if (!success)
+*/
 			{
 				if (exp < -330)	//330 = 308 + 22
 				{
@@ -640,4 +645,4 @@
 		}
 	}
 
-//}
+}
